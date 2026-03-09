@@ -1,6 +1,6 @@
 # codex
 
-这是一个基于微信小游戏中国风大富翁方案落地的 **MVP 服务端原型**。
+这是一个基于微信小游戏中国风大富翁方案落地的 **MVP 全栈原型（后端 + 前端最小可玩页面）**。
 
 ## 已实现（MVP 原型）
 
@@ -9,8 +9,9 @@
 - 自建房 + 房间码加入 + 房主开局
 - 基础对局回合：掷骰子、落点结算（含事件格收益/损失）、买地、结束回合
 - 对局快照接口（包含 seed / winner / maxRounds）
+- 前端最小可玩页面：大厅、匹配中、房间、棋盘回合按钮
 
-> 当前为内存态实现，便于你先验证核心流程；后续可替换为 MySQL + Redis + WebSocket 网关。
+> 当前为内存态实现，便于先验证核心流程；后续可替换为 MySQL + Redis + WebSocket 网关，并迁移到微信小游戏原生前端。
 
 ## 快速启动
 
@@ -18,7 +19,7 @@
 npm start
 ```
 
-默认端口 `3000`。
+启动后访问：`http://localhost:3000`
 
 ## 运行测试
 
@@ -38,6 +39,12 @@ npm test
 - `POST /matches/:id/buy-property`
 - `POST /matches/:id/end-turn`
 - `GET /matches/:id/snapshot`
+
+## 前端页面文件
+
+- `public/index.html`
+- `public/styles.css`
+- `public/app.js`
 
 ## 方案文档
 

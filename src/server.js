@@ -1,8 +1,24 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import http from 'node:http';
 import { MemoryStore } from './store.js';
 import { buyProperty, createMatch, endTurn, rollDice, snapshot } from './game-engine.js';
 
 const store = new MemoryStore();
+
+const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+
+function serveStatic(urlPath, res) {
+  const clean = urlPath === '/' ? '/index.html' : urlPath;
+  const filePath = path.resolve(PUBLIC_DIR, `.${clean}`);
+  if (!filePath.startsWith(PUBLIC_DIR)) return false;
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return false;
+  const ext = path.extname(filePath);
+  res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' });
+  fs.createReadStream(filePath).pipe(res);
+  return true;
+}
 
 function json(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -48,6 +64,8 @@ function createServer() {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
+
+      if (req.method === 'GET' && serveStatic(url.pathname, res)) return;
 
       if (req.method === 'POST' && url.pathname === '/auth/wechat/login') {
         const body = await parseBody(req);
