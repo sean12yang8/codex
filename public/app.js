@@ -3,7 +3,8 @@ const state = {
   player: JSON.parse(localStorage.getItem('player') || 'null'),
   room: null,
   match: null,
-  view: 'lobby'
+  view: 'lobby',
+  pollTimer: null
 };
 
 const viewEl = document.getElementById('view');
@@ -13,6 +14,16 @@ const boardNames = [
   '启程门','长安','机缘签','洛阳','漕运税','运河电站','扬州','长安机场','朝廷令','苏州','大理寺','杭州',
   '机缘签','成都','盐铁税','临安机场','广州','朝廷令','泉州','都江堰电站','茶馆','临安','机缘签','紫禁城'
 ];
+
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+
+function setPolling(fn, ms = 2000) {
+  stopPolling();
+  state.pollTimer = setInterval(() => fn().catch(() => {}), ms);
+}
 
 function setAuth(token, player) {
   state.token = token;
@@ -41,9 +52,16 @@ function renderUserBar() {
     : '';
   const logout = document.getElementById('logoutBtn');
   if (logout) logout.onclick = () => {
+    stopPolling();
     localStorage.clear();
     location.reload();
   };
+}
+
+function setView(next) {
+  if (state.view !== next) stopPolling();
+  state.view = next;
+  render();
 }
 
 function render() {
@@ -56,6 +74,7 @@ function render() {
 }
 
 function renderLogin() {
+  stopPolling();
   viewEl.innerHTML = `
     <section class="card">
       <h3>登录</h3>
@@ -73,8 +92,7 @@ function renderLogin() {
     try {
       const data = await api('/auth/wechat/login', { method: 'POST', body: { code, nickname } });
       setAuth(data.token, data.player);
-      state.view = 'lobby';
-      render();
+      setView('lobby');
     } catch (e) {
       document.getElementById('loginErr').textContent = e.message;
     }
@@ -82,6 +100,7 @@ function renderLogin() {
 }
 
 function renderLobby() {
+  stopPolling();
   viewEl.innerHTML = `
     <section class="card">
       <h3>大厅</h3>
@@ -105,30 +124,24 @@ function renderLobby() {
     const data = await api('/matchmaking/join', { method: 'POST', body: { mode: 'classic', targetPlayers } });
     if (data.status === 'matched') {
       state.match = { id: data.matchId };
-      state.view = 'board';
       await refreshSnapshot();
+      setView('board');
     } else {
-      state.view = 'matching';
       state.matchingConfig = { targetPlayers };
+      setView('matching');
     }
-    render();
   };
 
   document.getElementById('createRoomBtn').onclick = async () => {
     const maxPlayers = Number(document.getElementById('roomPlayers').value);
-    state.room = await api('/rooms/create', {
-      method: 'POST',
-      body: { maxPlayers, maxRounds: 20, initialCash: 1500 }
-    });
-    state.view = 'room';
-    render();
+    state.room = await api('/rooms/create', { method: 'POST', body: { maxPlayers, maxRounds: 20, initialCash: 1500 } });
+    setView('room');
   };
 
   document.getElementById('joinRoomBtn').onclick = async () => {
     const roomCode = document.getElementById('joinCode').value.trim();
     state.room = await api('/rooms/join', { method: 'POST', body: { roomCode } });
-    state.view = 'room';
-    render();
+    setView('room');
   };
 }
 
@@ -136,28 +149,29 @@ function renderMatching() {
   viewEl.innerHTML = `
     <section class="card">
       <h3>匹配中...</h3>
-      <p class="small">目标人数：${state.matchingConfig.targetPlayers}</p>
-      <button id="pollMatchBtn">刷新匹配状态</button>
+      <p class="small">目标人数：${state.matchingConfig.targetPlayers}（自动每 2 秒刷新）</p>
+      <button id="pollMatchBtn">立即刷新</button>
       <button id="cancelMatchBtn" class="secondary">取消匹配</button>
+      <div id="matchErr" class="small"></div>
     </section>`;
 
-  document.getElementById('pollMatchBtn').onclick = async () => {
+  const check = async () => {
     const data = await api('/matchmaking/join', {
       method: 'POST',
       body: { mode: 'classic', targetPlayers: state.matchingConfig.targetPlayers }
     });
     if (data.status === 'matched') {
       state.match = { id: data.matchId };
-      state.view = 'board';
       await refreshSnapshot();
-      render();
+      setView('board');
     }
   };
 
+  setPolling(check, 2000);
+  document.getElementById('pollMatchBtn').onclick = () => check().catch((e) => document.getElementById('matchErr').textContent = e.message);
   document.getElementById('cancelMatchBtn').onclick = async () => {
     await api('/matchmaking/cancel', { method: 'POST' });
-    state.view = 'lobby';
-    render();
+    setView('lobby');
   };
 }
 
@@ -166,30 +180,34 @@ function renderRoom() {
     <section class="card">
       <h3>房间</h3>
       <p>房间码：<strong>${state.room.roomCode}</strong></p>
-      <p>人数：${state.room.playerIds.length}/${state.room.maxPlayers}</p>
-      <button id="refreshRoomBtn">刷新房间</button>
+      <p>人数：${state.room.playerIds.length}/${state.room.maxPlayers}（自动每 2 秒刷新）</p>
+      <button id="refreshRoomBtn">立即刷新</button>
       <button id="startRoomBtn">房主开始</button>
       <button id="backLobbyBtn" class="secondary">回大厅</button>
+      <div id="roomErr" class="small"></div>
       <pre>${JSON.stringify(state.room, null, 2)}</pre>
     </section>`;
 
-  document.getElementById('refreshRoomBtn').onclick = async () => {
-    state.room = await api('/rooms/join', { method: 'POST', body: { roomCode: state.room.roomCode } });
+  const pullRoom = async () => {
+    state.room = await api(`/rooms/code/${state.room.roomCode}`);
     render();
   };
+
+  setPolling(pullRoom, 2000);
+  document.getElementById('refreshRoomBtn').onclick = () => pullRoom().catch((e) => document.getElementById('roomErr').textContent = e.message);
 
   document.getElementById('startRoomBtn').onclick = async () => {
-    const data = await api('/rooms/start', { method: 'POST', body: { roomId: state.room.id } });
-    state.match = { id: data.matchId };
-    state.view = 'board';
-    await refreshSnapshot();
-    render();
+    try {
+      const data = await api('/rooms/start', { method: 'POST', body: { roomId: state.room.id } });
+      state.match = { id: data.matchId };
+      await refreshSnapshot();
+      setView('board');
+    } catch (e) {
+      document.getElementById('roomErr').textContent = e.message;
+    }
   };
 
-  document.getElementById('backLobbyBtn').onclick = () => {
-    state.view = 'lobby';
-    render();
-  };
+  document.getElementById('backLobbyBtn').onclick = () => setView('lobby');
 }
 
 async function refreshSnapshot() {
@@ -199,6 +217,7 @@ async function refreshSnapshot() {
 function renderBoard() {
   const me = state.match.players.find((p) => p.playerId === state.player.id);
   const isMyTurn = state.match.currentPlayerId === state.player.id;
+  const over = state.match.status === 'finished';
 
   viewEl.innerHTML = `
     <section class="card">
@@ -208,11 +227,12 @@ function renderBoard() {
         <span class="badge">当前玩家: ${state.match.currentPlayerId}</span>
         <span class="badge">状态: ${state.match.status}</span>
       </p>
+      ${over ? `<p><strong>对局结束，胜者：${state.match.winnerPlayerId || '未产生'}</strong></p>` : ''}
       <p class="small">我的位置: ${me?.position ?? '-'} | 我的现金: ${me?.cash ?? '-'}</p>
       <button id="refreshBtn">刷新快照</button>
-      <button id="rollBtn" ${isMyTurn ? '' : 'disabled'}>掷骰子</button>
-      <button id="buyBtn" ${isMyTurn ? '' : 'disabled'}>购买当前地块</button>
-      <button id="endBtn" ${isMyTurn ? '' : 'disabled'}>结束回合</button>
+      <button id="rollBtn" ${isMyTurn && !over ? '' : 'disabled'}>掷骰子</button>
+      <button id="buyBtn" ${isMyTurn && !over ? '' : 'disabled'}>购买当前地块</button>
+      <button id="endBtn" ${isMyTurn && !over ? '' : 'disabled'}>结束回合</button>
       <button id="backLobbyBtn" class="secondary">回大厅</button>
       <div id="actionMsg" class="small"></div>
     </section>
@@ -231,34 +251,40 @@ function renderBoard() {
       <pre>${JSON.stringify(state.match.logs, null, 2)}</pre>
     </section>`;
 
+  setPolling(async () => {
+    await refreshSnapshot();
+    render();
+  }, 2000);
+
+  const msg = document.getElementById('actionMsg');
   document.getElementById('refreshBtn').onclick = async () => { await refreshSnapshot(); render(); };
-  document.getElementById('backLobbyBtn').onclick = () => { state.view = 'lobby'; render(); };
+  document.getElementById('backLobbyBtn').onclick = () => setView('lobby');
 
   document.getElementById('rollBtn').onclick = async () => {
     try {
       const data = await api(`/matches/${state.match.id}/roll-dice`, { method: 'POST' });
-      document.getElementById('actionMsg').textContent = `落点: ${data.tile.name}, 动作: ${data.action}`;
+      msg.textContent = `落点: ${data.tile.name}, 动作: ${data.action}`;
       await refreshSnapshot();
       render();
-    } catch (e) { document.getElementById('actionMsg').textContent = e.message; }
+    } catch (e) { msg.textContent = e.message; }
   };
 
   document.getElementById('buyBtn').onclick = async () => {
     try {
       const data = await api(`/matches/${state.match.id}/buy-property`, { method: 'POST' });
-      document.getElementById('actionMsg').textContent = `购买成功: 地块#${data.tileId}, 花费${data.price}`;
+      msg.textContent = `购买成功: 地块#${data.tileId}, 花费${data.price}`;
       await refreshSnapshot();
       render();
-    } catch (e) { document.getElementById('actionMsg').textContent = e.message; }
+    } catch (e) { msg.textContent = e.message; }
   };
 
   document.getElementById('endBtn').onclick = async () => {
     try {
       const data = await api(`/matches/${state.match.id}/end-turn`, { method: 'POST' });
-      document.getElementById('actionMsg').textContent = `下一位: ${data.nextPlayerId}`;
+      msg.textContent = `下一位: ${data.nextPlayerId}`;
       await refreshSnapshot();
       render();
-    } catch (e) { document.getElementById('actionMsg').textContent = e.message; }
+    } catch (e) { msg.textContent = e.message; }
   };
 }
 

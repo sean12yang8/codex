@@ -118,3 +118,18 @@ test('match finishes when maxRounds reached', async () => {
   assert.equal(blocked.status, 409);
   assert.equal(blocked.data.error, 'MATCH_FINISHED');
 });
+
+
+test('room can be queried by room code', async () => {
+  const tokenA = await login('g01');
+  const roomRes = await api('/rooms/create', {
+    method: 'POST',
+    token: tokenA,
+    body: { maxPlayers: 2, initialCash: 1500 }
+  });
+  assert.equal(roomRes.status, 200);
+
+  const got = await api(`/rooms/code/${roomRes.data.roomCode}`, { token: tokenA });
+  assert.equal(got.status, 200);
+  assert.equal(got.data.id, roomRes.data.id);
+});

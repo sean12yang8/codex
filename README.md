@@ -46,6 +46,12 @@ npm test
 - `public/styles.css`
 - `public/app.js`
 
+
+## 当前交付级别
+
+- ✅ 可交付 Demo：支持 2~4 人匹配/建房、回合操作、结算与基础前端体验。
+- ⚠️ 非微信正式版：尚未接入微信小游戏原生 API、WebSocket 实时推送、持久化存储与线上部署配置。
+
 ## 方案文档
 
 - `docs/wechat-monopoly-design.md`

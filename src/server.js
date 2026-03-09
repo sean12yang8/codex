@@ -139,6 +139,17 @@ function createServer() {
         return json(res, 200, room);
       }
 
+
+      const roomCodeMatch = url.pathname.match(/^\/rooms\/code\/([^/]+)$/);
+      if (req.method === 'GET' && roomCodeMatch) {
+        const player = requirePlayer(req, res);
+        if (!player) return;
+        const [, roomCode] = roomCodeMatch;
+        const room = [...store.rooms.values()].find((r) => r.roomCode === roomCode);
+        if (!room) return json(res, 404, { error: 'ROOM_NOT_FOUND' });
+        return json(res, 200, room);
+      }
+
       if (req.method === 'POST' && url.pathname === '/rooms/start') {
         const player = requirePlayer(req, res);
         if (!player) return;
