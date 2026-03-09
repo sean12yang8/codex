@@ -72,7 +72,7 @@ function createServer() {
         const ready = matchPlayers(queue, targetPlayers);
         if (!ready) return json(res, 200, { status: 'queued', mode, targetPlayers });
 
-        const room = store.createRoom({ ownerPlayerId: ready[0], maxPlayers: targetPlayers, initialCash: 1500, turnTimeSec: 30, source: 'matchmaking' });
+        const room = store.createRoom({ ownerPlayerId: ready[0], maxPlayers: targetPlayers, initialCash: 1500, turnTimeSec: 30, maxRounds: 30, seed: Date.now(), source: 'matchmaking' });
         room.playerIds = ready;
         room.status = 'playing';
         const matchId = `m_${Date.now()}`;
@@ -102,6 +102,8 @@ function createServer() {
           maxPlayers,
           initialCash: Number(body.initialCash || 1500),
           turnTimeSec: Number(body.turnTimeSec || 30),
+          maxRounds: Number(body.maxRounds || 30),
+          seed: body.seed === undefined ? Date.now() : Number(body.seed),
           source: 'custom_room'
         });
         return json(res, 200, room);

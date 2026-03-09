@@ -7,8 +7,8 @@
 - 微信登录接口（模拟 `wx.login` code 换取用户与 token）
 - 自动匹配（2/4 人）
 - 自建房 + 房间码加入 + 房主开局
-- 基础对局回合：掷骰子、落点结算、买地、结束回合
-- 对局快照接口
+- 基础对局回合：掷骰子、落点结算（含事件格收益/损失）、买地、结束回合
+- 对局快照接口（包含 seed / winner / maxRounds）
 
 > 当前为内存态实现，便于你先验证核心流程；后续可替换为 MySQL + Redis + WebSocket 网关。
 
@@ -31,7 +31,7 @@ npm test
 - `POST /auth/wechat/login`
 - `POST /matchmaking/join`
 - `POST /matchmaking/cancel`
-- `POST /rooms/create`
+- `POST /rooms/create`（支持 `maxRounds` 与 `seed`）
 - `POST /rooms/join`
 - `POST /rooms/start`
 - `POST /matches/:id/roll-dice`

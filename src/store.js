@@ -46,7 +46,7 @@ export class MemoryStore {
     return this.matchQueues.get(key);
   }
 
-  createRoom({ ownerPlayerId, maxPlayers, initialCash, turnTimeSec, source }) {
+  createRoom({ ownerPlayerId, maxPlayers, initialCash, turnTimeSec, maxRounds, seed, source }) {
     const roomId = randId('r');
     const roomCode = `${Math.floor(100000 + Math.random() * 900000)}`;
     const room = {
@@ -57,6 +57,8 @@ export class MemoryStore {
       initialCash,
       turnTimeSec,
       source,
+      maxRounds,
+      seed,
       status: 'waiting',
       playerIds: [ownerPlayerId],
       createdAt: new Date().toISOString()

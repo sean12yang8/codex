@@ -5,13 +5,20 @@ import { createServer } from '../src/server.js';
 let server;
 let baseUrl;
 
-async function login(code) {
-  const r = await fetch(`${baseUrl}/auth/wechat/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code })
+async function api(path, { method = 'GET', token, body } = {}) {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(body ? { 'content-type': 'application/json' } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
   });
-  const data = await r.json();
+  return { status: res.status, data: await res.json() };
+}
+
+async function login(code) {
+  const { data } = await api('/auth/wechat/login', { method: 'POST', body: { code } });
   return data.token;
 }
 
@@ -30,83 +37,84 @@ test('custom room flow start match and play one turn', async () => {
   const tokenA = await login('a01');
   const tokenB = await login('b01');
 
-  const roomRes = await fetch(`${baseUrl}/rooms/create`, {
+  const roomRes = await api('/rooms/create', {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${tokenA}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ maxPlayers: 2, initialCash: 1500 })
+    token: tokenA,
+    body: { maxPlayers: 2, initialCash: 1500, seed: 42, maxRounds: 10 }
   });
   assert.equal(roomRes.status, 200);
-  const room = await roomRes.json();
 
-  const joinRes = await fetch(`${baseUrl}/rooms/join`, {
+  const joinRes = await api('/rooms/join', {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${tokenB}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ roomCode: room.roomCode })
+    token: tokenB,
+    body: { roomCode: roomRes.data.roomCode }
   });
   assert.equal(joinRes.status, 200);
 
-  const startRes = await fetch(`${baseUrl}/rooms/start`, {
+  const startRes = await api('/rooms/start', {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${tokenA}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ roomId: room.id })
+    token: tokenA,
+    body: { roomId: roomRes.data.id }
   });
   assert.equal(startRes.status, 200);
-  const { matchId } = await startRes.json();
+  const matchId = startRes.data.matchId;
 
-  const rollRes = await fetch(`${baseUrl}/matches/${matchId}/roll-dice`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${tokenA}` }
-  });
+  const rollRes = await api(`/matches/${matchId}/roll-dice`, { method: 'POST', token: tokenA });
   assert.equal(rollRes.status, 200);
+  assert.ok(rollRes.data.tile);
 
-  const endRes = await fetch(`${baseUrl}/matches/${matchId}/end-turn`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${tokenA}` }
-  });
+  const endRes = await api(`/matches/${matchId}/end-turn`, { method: 'POST', token: tokenA });
   assert.equal(endRes.status, 200);
 
-  const snapshotRes = await fetch(`${baseUrl}/matches/${matchId}/snapshot`, {
-    headers: { authorization: `Bearer ${tokenA}` }
-  });
+  const snapshotRes = await api(`/matches/${matchId}/snapshot`, { token: tokenA });
   assert.equal(snapshotRes.status, 200);
-  const snap = await snapshotRes.json();
-  assert.equal(snap.players.length, 2);
-  assert.ok(snap.currentPlayerId);
+  assert.equal(snapshotRes.data.players.length, 2);
+  assert.equal(snapshotRes.data.seed, 42);
+  assert.ok(snapshotRes.data.currentPlayerId);
 });
 
 test('matchmaking can form 2-player game', async () => {
   const tokenC = await login('c01');
   const tokenD = await login('d01');
 
-  const queued = await fetch(`${baseUrl}/matchmaking/join`, {
+  const queued = await api('/matchmaking/join', {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${tokenC}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ mode: 'classic', targetPlayers: 2 })
+    token: tokenC,
+    body: { mode: 'classic', targetPlayers: 2 }
   });
-  const qData = await queued.json();
-  assert.equal(qData.status, 'queued');
+  assert.equal(queued.data.status, 'queued');
 
-  const matched = await fetch(`${baseUrl}/matchmaking/join`, {
+  const matched = await api('/matchmaking/join', {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${tokenD}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ mode: 'classic', targetPlayers: 2 })
+    token: tokenD,
+    body: { mode: 'classic', targetPlayers: 2 }
   });
-  const mData = await matched.json();
-  assert.equal(mData.status, 'matched');
-  assert.equal(mData.playerIds.length, 2);
+  assert.equal(matched.data.status, 'matched');
+  assert.equal(matched.data.playerIds.length, 2);
+});
+
+test('match finishes when maxRounds reached', async () => {
+  const tokenA = await login('e01');
+  const tokenB = await login('f01');
+
+  const room = await api('/rooms/create', {
+    method: 'POST',
+    token: tokenA,
+    body: { maxPlayers: 2, initialCash: 1500, seed: 7, maxRounds: 1 }
+  });
+  await api('/rooms/join', { method: 'POST', token: tokenB, body: { roomCode: room.data.roomCode } });
+  const start = await api('/rooms/start', { method: 'POST', token: tokenA, body: { roomId: room.data.id } });
+  const matchId = start.data.matchId;
+
+  await api(`/matches/${matchId}/roll-dice`, { method: 'POST', token: tokenA });
+  await api(`/matches/${matchId}/end-turn`, { method: 'POST', token: tokenA });
+  await api(`/matches/${matchId}/roll-dice`, { method: 'POST', token: tokenB });
+  const endB = await api(`/matches/${matchId}/end-turn`, { method: 'POST', token: tokenB });
+
+  assert.equal(endB.data.status, 'finished');
+  assert.ok(endB.data.winnerPlayerId);
+
+  const blocked = await api(`/matches/${matchId}/roll-dice`, { method: 'POST', token: tokenA });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.data.error, 'MATCH_FINISHED');
 });
