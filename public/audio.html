@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AudioStudio MVP</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="app-shell audio-page">
+<div class="container">
+  <div class="nav" style="margin-bottom:12px;">
+    <a class="pill" href="/">← 返回首页</a>
+    <div class="logo">AudioStudio · GPT-Audio 1.5</div>
+  </div>
+
+  <div class="audio-layout">
+    <section class="light-card">
+      <h3>转写摘要</h3>
+      <p style="color:#5a6d92;">将已有转写文本粘贴进来，自动输出摘要 / 行动项 / 风险点。</p>
+      <textarea id="transcript" rows="10" placeholder="粘贴会议/客服通话转写文本..."></textarea>
+      <button class="btn" onclick="analyze()">一键转写摘要</button>
+    </section>
+
+    <section class="light-card">
+      <h3>摘要输出</h3>
+      <pre id="summaryOut">等待分析...</pre>
+    </section>
+
+    <section class="light-card">
+      <h3>口播文案生成</h3>
+      <input id="topic" placeholder="主题：例如 新人如何做短视频起号" />
+      <div style="display:flex; gap:8px; margin:10px 0;">
+        <select id="tone"><option>专业</option><option>轻松</option><option>故事感</option></select>
+        <select id="duration"><option>30秒</option><option selected>60秒</option><option>90秒</option></select>
+      </div>
+      <button class="btn" onclick="genScript()">生成口播稿</button>
+      <button class="btn" onclick="speakScript()">播放口播</button>
+    </section>
+
+    <section class="light-card">
+      <h3>文案输出</h3>
+      <pre id="scriptOut">等待生成...</pre>
+    </section>
+  </div>
+</div>
+
+<script>
+async function analyze() {
+  const transcript = document.getElementById('transcript').value.trim();
+  if (!transcript) return;
+
+  const out = document.getElementById('summaryOut');
+  out.textContent = '分析中...';
+
+  const res = await fetch('/api/audio/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript })
+  });
+  const data = await res.json();
+  out.textContent = res.ok ? `${data.summary}\n\n（mode: ${data.mode}）` : `错误：${data.error || '请求失败'}`;
+}
+
+async function genScript() {
+  const topic = document.getElementById('topic').value.trim();
+  const tone = document.getElementById('tone').value;
+  const duration = document.getElementById('duration').value;
+  if (!topic) return;
+
+  const out = document.getElementById('scriptOut');
+  out.textContent = '生成中...';
+
+  const res = await fetch('/api/audio/script', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, tone, duration })
+  });
+  const data = await res.json();
+  out.textContent = res.ok ? `${data.script}\n\n（mode: ${data.mode}）` : `错误：${data.error || '请求失败'}`;
+}
+
+function speakScript() {
+  const text = document.getElementById('scriptOut').textContent;
+  if (!('speechSynthesis' in window) || text.includes('等待')) return;
+  const utter = new SpeechSynthesisUtterance(text.replace(/\n\n（mode:[\s\S]*/, ''));
+  utter.lang = 'zh-CN';
+  utter.rate = 1;
+  speechSynthesis.speak(utter);
+}
+</script>
+</body>
+</html>

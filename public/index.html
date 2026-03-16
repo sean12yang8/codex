@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure Realtime + Audio MVP</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <section class="hero">
+    <div class="container">
+      <div class="nav">
+        <div class="logo">Azure Voice AI MVP</div>
+        <div class="pill" id="health-pill">正在检测模式...</div>
+      </div>
+      <h1>两个可试运行网页端 MVP</h1>
+      <p style="color:#b9c7e5;max-width:720px;line-height:1.7;">一个基于 Azure GPT-Realtime 1.5 的实时会话产品，一个基于 Azure GPT-Audio 1.5 的音频工作台。未配置 Azure 环境变量时自动进入 Mock 模式，保证演示可运行。</p>
+      <div class="cards">
+        <article class="card">
+          <h3>RealtimeTalk</h3>
+          <p>低延迟语音/文本对话，适合口语陪练、语音导购和实时问答。支持语音识别输入（浏览器支持时）与多轮聊天。</p>
+          <a class="btn" href="/realtime.html">打开 RealtimeTalk</a>
+        </article>
+        <article class="card">
+          <h3>AudioStudio</h3>
+          <p>音频理解与内容生成工作台，支持“转写摘要”和“口播文案生成 + 浏览器播报”，适合质检与创作者场景。</p>
+          <a class="btn" href="/audio.html">打开 AudioStudio</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+<script>
+  fetch('/api/health').then(r => r.json()).then(d => {
+    const pill = document.getElementById('health-pill');
+    pill.textContent = d.mode === 'azure' ? 'Azure 在线模式' : 'Mock 演示模式';
+  }).catch(() => {});
+</script>
+</body>
+</html>
