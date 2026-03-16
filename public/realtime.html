@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RealtimeTalk MVP</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="app-shell realtime-page">
+<div class="container">
+  <div class="nav" style="margin-bottom:12px;">
+    <a class="pill" href="/">← 返回首页</a>
+    <div class="logo">RealtimeTalk · GPT-Realtime 1.5</div>
+  </div>
+
+  <div class="realtime-layout">
+    <aside class="panel">
+      <h3>场景模板</h3>
+      <p class="status">点击快速注入首轮话题</p>
+      <button class="btn" onclick="seed('我想练习商务英语开场白')">英语陪练</button>
+      <button class="btn" onclick="seed('帮我推荐200元以内的蓝牙耳机')">语音导购</button>
+      <button class="btn" onclick="seed('活动议程是什么？我只有20分钟')">活动问答</button>
+    </aside>
+
+    <main class="panel">
+      <div class="status" id="status">状态：待命</div>
+      <div id="chatLog" class="chat-log"></div>
+      <div class="input-row">
+        <input id="inputText" placeholder="输入内容，或点击“语音输入”后说话..." />
+        <button class="btn" onclick="sendMsg()">发送</button>
+      </div>
+      <div class="input-row">
+        <button class="btn" onclick="startSpeech()">语音输入</button>
+        <button class="btn" onclick="interruptBot()">打断/清空状态</button>
+      </div>
+    </main>
+
+    <aside class="panel">
+      <h3>会话提示</h3>
+      <p class="status">建议每次一句，模型会追问你细节。</p>
+      <ul style="color:#c7d4ef;line-height:1.8;padding-left:18px;">
+        <li>先给背景</li>
+        <li>再给数字/时间</li>
+        <li>最后说你的目标</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<script>
+const chatLog = document.getElementById('chatLog');
+const inputText = document.getElementById('inputText');
+const statusEl = document.getElementById('status');
+const history = [];
+
+function addBubble(text, cls) {
+  const div = document.createElement('div');
+  div.className = `bubble ${cls}`;
+  div.textContent = text;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function seed(text) {
+  inputText.value = text;
+}
+
+async function sendMsg() {
+  const text = inputText.value.trim();
+  if (!text) return;
+  addBubble(text, 'user');
+  history.push({ role: 'user', content: text });
+  inputText.value = '';
+  statusEl.textContent = '状态：Thinking...';
+
+  const res = await fetch('/api/realtime/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: text, history })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    addBubble(`错误：${data.error || '请求失败'}`, 'bot');
+    statusEl.textContent = '状态：错误';
+    return;
+  }
+
+  addBubble(data.reply, 'bot');
+  history.push({ role: 'assistant', content: data.reply });
+  statusEl.textContent = `状态：Speaking (${data.mode})`;
+
+  if ('speechSynthesis' in window) {
+    const utter = new SpeechSynthesisUtterance(data.reply);
+    utter.lang = 'zh-CN';
+    utter.rate = 1.02;
+    speechSynthesis.speak(utter);
+  }
+}
+
+function interruptBot() {
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+  }
+  statusEl.textContent = '状态：已打断';
+}
+
+function startSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    statusEl.textContent = '状态：浏览器不支持语音识别';
+    return;
+  }
+  const recog = new SR();
+  recog.lang = 'zh-CN';
+  recog.onstart = () => statusEl.textContent = '状态：Listening...';
+  recog.onresult = (evt) => {
+    const t = evt.results[0][0].transcript;
+    inputText.value = t;
+    statusEl.textContent = '状态：识别完成，可发送';
+  };
+  recog.onerror = () => statusEl.textContent = '状态：语音识别失败';
+  recog.start();
+}
+</script>
+</body>
+</html>
