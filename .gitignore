@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+frontend/dist/
+.data/
+.env
+*.pyc
+
+*.tsbuildinfo
+.ruff_cache/
+
+# Local credentials and runtime artifacts
+.env.*
+!.env.example
+.azure/
+.aws/
+*.key
+*.pem
+*.pfx
+*.p12
+*.db
+*.sqlite
+*.sqlite3
+backups/
